@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>eBay Listing Editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: a sticky tool bar over one dense column of listing rows; each row expands in place into a two-column form. */
+:root {
+  --paper: #f3f5f8;
+  --surface: #ffffff;
+  --ink: #1b2430;
+  --muted: #5b6878;
+  --line: #d3dae3;
+  --accent: #0a6a94;
+  --accent-ink: #ffffff;
+  --good: #1c7a4c;
+  --warn: #a35400;
+  --warn-bg: #fdf1e2;
+  --good-bg: #e4f4ec;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", Consolas, "Courier New", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #12171e; --surface: #1a212b; --ink: #e6ebf2; --muted: #97a4b5; --line: #303a48;
+    --accent: #4fb3dc; --accent-ink: #0c1218; --good: #5ccb93; --warn: #f0a650;
+    --warn-bg: #3a2a14; --good-bg: #173326; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #12171e; --surface: #1a212b; --ink: #e6ebf2; --muted: #97a4b5; --line: #303a48;
+  --accent: #4fb3dc; --accent-ink: #0c1218; --good: #5ccb93; --warn: #f0a650;
+  --warn-bg: #3a2a14; --good-bg: #173326; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--paper); color: var(--ink); font: 14px/1.45 var(--font-body); }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+header.bar { position: sticky; top: 0; z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); }
+.bar-inner { max-width: 1180px; margin: 0 auto; padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
+h1 { font-size: 17px; font-weight: 600; margin: 0; }
+.file-state { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.file-state.dirty { color: var(--warn); }
+.spacer { flex: 1 1 auto; }
+.group { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+.btn { border: 1px solid var(--line); background: var(--surface); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-weight: 500; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.small { padding: 3px 8px; font-size: 12px; }
+.btn.danger { color: var(--warn); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+main { max-width: 1180px; margin: 0 auto; padding: 14px 16px 60px; display: flex; flex-direction: column; gap: 12px; }
+.notice { background: var(--warn-bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.notice[hidden] { display: none; }
+
+.summary { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; }
+.summary .fig { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 500; }
+.summary label { display: flex; gap: 6px; align-items: center; white-space: nowrap; }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+.panel h2 { font-size: 13px; font-weight: 600; margin: 0 0 8px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.panel[hidden] { display: none; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px 14px; }
+.grid.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.field > span { font-size: 12px; color: var(--muted); }
+.field.wide { grid-column: 1 / -1; }
+input[type="text"], input[type="number"], select, textarea {
+  background: var(--paper); border: 1px solid var(--line); border-radius: 5px; padding: 5px 8px; width: 100%; min-width: 0;
+}
+textarea { resize: vertical; min-height: 72px; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+#list { display: flex; flex-direction: column; gap: 8px; }
+.item { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; border-left: 4px solid var(--line); }
+.item.ready { border-left-color: var(--good); }
+.item.todo { border-left-color: var(--warn); }
+.item.listed { border-left-color: var(--accent); }
+.item.off { opacity: .62; }
+.item.listed.off { opacity: .8; }
+.row { display: grid; grid-template-columns: auto 52px minmax(0, 1fr) 104px auto auto; gap: 10px; align-items: center; padding: 8px 12px; }
+.row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); }
+.thumb { width: 52px; height: 40px; border-radius: 4px; object-fit: cover; background: var(--paper); border: 1px solid var(--line); display: block; }
+.thumb.none { display: grid; place-items: center; font-size: 10px; color: var(--muted); }
+.titlecell { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.titlecell .meta { display: flex; gap: 10px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+.count.over { color: var(--warn); font-weight: 600; }
+.price { display: flex; align-items: center; gap: 4px; }
+.chip { font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.chip.ready { background: var(--good-bg); color: var(--good); }
+.chip.todo { background: var(--warn-bg); color: var(--warn); }
+.chip.listed { background: var(--paper); color: var(--accent); border: 1px solid var(--accent); }
+.hide-listed .item.listed { display: none; }
+
+.detail { border-top: 1px solid var(--line); padding: 12px; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; }
+.detail h3 { font-size: 12px; font-weight: 600; margin: 0 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.problems { margin: 0; padding-left: 18px; color: var(--warn); }
+.spec { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) auto; gap: 6px; margin-bottom: 6px; }
+.photos { display: flex; flex-wrap: wrap; gap: 8px; }
+.photo { width: 120px; display: flex; flex-direction: column; gap: 3px; }
+.photo img, .photo .ph { width: 120px; height: 90px; object-fit: cover; border-radius: 5px; border: 1px solid var(--line); background: var(--paper); }
+.photo .ph { display: grid; place-items: center; font-size: 11px; color: var(--muted); text-align: center; padding: 4px; }
+.photo .name { font-family: var(--font-mono); font-size: 10px; color: var(--muted); overflow-wrap: anywhere; }
+.hint { font-size: 12px; color: var(--muted); margin: 4px 0 0; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.empty { text-align: center; padding: 40px 16px; color: var(--muted); }
+.sr { position: absolute; left: -9999px; }
+
+@media (max-width: 760px) {
+  .row { grid-template-columns: auto 52px minmax(0, 1fr); }
+  .row .price, .row .chip, .row .toggle { grid-column: 3; justify-self: start; }
+  .detail { grid-template-columns: minmax(0, 1fr); }
+  .grid.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 420px) {
+  .grid.four { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: no-preference) { .btn { transition: border-color .12s; } }
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="bar-inner">
+    <h1>eBay Listing Editor</h1>
+    <span id="fileState" class="file-state">No data file open</span>
+    <span class="spacer"></span>
+    <div class="group">
+      <button id="openBtn" class="btn" type="button">Open data file</button>
+      <button id="saveBtn" class="btn" type="button">Save data file</button>
+      <button id="addBtn" class="btn" type="button">Add item</button>
+      <button id="exportBtn" class="btn primary" type="button">Export CSV</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div id="notice" class="notice" hidden>
+    <span id="noticeText"></span>
+    <button id="noticeReload" class="btn small" type="button" hidden>Reload from file</button>
+    <button id="noticeForce" class="btn small danger" type="button" hidden>Save anyway</button>
+    <button id="noticeClose" class="btn small" type="button">Dismiss</button>
+  </div>
+
+  <div class="summary">
+    <span><span id="selCount" class="fig">0 of 0</span> selected</span>
+    <span>Selected total <span id="selTotal" class="fig">$0.00</span></span>
+    <span><span id="selProblems" class="fig">0</span> selected need fixes</span>
+    <span><span id="listedCount" class="fig">0</span> listed on eBay</span>
+    <span class="spacer"></span>
+    <label for="hideListed"><input type="checkbox" id="hideListed"> Hide listed</label>
+    <button id="allBtn" class="btn small" type="button">Select all</button>
+    <button id="noneBtn" class="btn small" type="button">Select none</button>
+    <button id="markListedBtn" class="btn small" type="button">Mark selected as listed</button>
+    <label for="exportType">Export as
+      <select id="exportType">
+        <option value="draft">Drafts (add photos in Seller Hub)</option>
+        <option value="live">Live listings (needs photo URLs and shipping costs)</option>
+      </select>
+    </label>
+  </div>
+
+  <section id="livePanel" class="panel" hidden>
+    <h2>Live listing settings</h2>
+    <div class="grid four">
+      <label class="field" for="setAction"><span>Upload action</span><select id="setAction" data-set="liveAction"><option value="VerifyAdd">Verify only (checks the file, lists nothing)</option><option value="Add">List (creates live listings)</option></select></label>
+      <label class="field" for="setSchedule"><span>Schedule start (YYYY-MM-DD HH:MM:SS)</span><input id="setSchedule" class="mono" type="text" data-set="scheduleTime" placeholder="Empty = start right away"></label>
+      <label class="field" for="setLocation"><span>Item location (ZIP code)</span><input id="setLocation" type="text" data-set="location"></label>
+      <label class="field" for="setDispatch"><span>Handling time (days)</span><input id="setDispatch" type="number" min="0" max="30" data-set="dispatchDays"></label>
+      <label class="field" for="setShip"><span>Shipping service code</span><input id="setShip" class="mono" type="text" data-set="shippingService"></label>
+      <label class="field" for="setReturn"><span>Returns</span><select id="setReturn" data-set="returnsAccepted"><option value="ReturnsAccepted">Accepted</option><option value="ReturnsNotAccepted">Not accepted</option></select></label>
+      <label class="field" for="setWithin"><span>Return window</span><select id="setWithin" data-set="returnsWithin"><option value="Days_30">30 days</option><option value="Days_60">60 days</option></select></label>
+      <label class="field" for="setPaidBy"><span>Return shipping paid by</span><select id="setPaidBy" data-set="returnShippingPaidBy"><option value="Buyer">Buyer</option><option value="Seller">Seller</option></select></label>
+    </div>
+    <p class="hint">Upload with "Verify only" first: eBay checks every row and reports errors without listing anything. Each item also needs a shipping cost (0 means free shipping) and at least one public photo URL.</p>
+  </section>
+
+  <div id="list"></div>
+</main>
+
+<input id="fileInput" class="sr" type="file" accept=".json,application/json" aria-label="Open data file">
+<datalist id="catList">
+  <option value="170083">Memory (RAM)</option>
+  <option value="175669">Solid State Drives</option>
+  <option value="56083">Internal Hard Disk Drives</option>
+  <option value="20318">Network Cards</option>
+</datalist>
+
+<script src="core.js"></script>
+<script>
+var STORE_KEY = "ebayListingEditor.workingCopy";
+var state = { data: normalizeData({ listings: [] }), fileHandle: null, fileName: "", fileTime: 0, dirty: false, open: {}, blobUrls: {}, confirmDelete: -1 };
+var saveTimer = null;
+
+function byId(id) { return document.getElementById(id); }
+function esc(value) {
+  return String(value === null || value === undefined ? "" : value)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function money(value) { return "$" + Number(value || 0).toFixed(2); }
+
+function showNotice(text, mode) {
+  byId("noticeText").textContent = text;
+  byId("noticeReload").hidden = mode !== "conflict";
+  byId("noticeForce").hidden = mode !== "conflict";
+  byId("notice").hidden = false;
+}
+
+function markDirty() {
+  state.dirty = true;
+  renderFileState();
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(function () {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify({ fileName: state.fileName, data: state.data, dirty: true })); } catch (err) { /* working copy is optional */ }
+  }, 300);
+}
+
+function renderFileState() {
+  var el = byId("fileState");
+  var name = state.fileName || "No data file open";
+  el.textContent = state.dirty ? name + " (unsaved changes)" : name;
+  el.className = "file-state" + (state.dirty ? " dirty" : "");
+}
+
+var PHOTO_DIR = "../photos/";
+function photoSrc(item, name) { return state.blobUrls[name] || PHOTO_DIR + encodeURIComponent(item.sku) + "/" + encodeURI(name); }
+
+function today() {
+  var d = new Date();
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+}
+
+// Status shown on a row: listed items aren't exported, so their problems don't matter.
+function rowStatus(item, problems) {
+  if (item.listed) return { cls: "listed", text: "Listed " + item.listed };
+  return problems.length ? { cls: "todo", text: problems.length + " to fix" } : { cls: "ready", text: "Ready" };
+}
+
+function rowHtml(item, index) {
+  var problems = validateListing(item, state.data.settings, state.data.settings.exportType);
+  var isOpen = !!state.open[index];
+  var status = rowStatus(item, problems);
+  var statusClass = status.cls;
+  var titleLength = String(item.title).trim().length;
+  var thumb = item.photos.length
+    ? '<img class="thumb" alt="" src="' + esc(photoSrc(item, item.photos[0])) + '" data-fallback="thumb">'
+    : '<span class="thumb none">no photo</span>';
+  var html = '<article class="item ' + statusClass + (item.include ? "" : " off") + '" data-i="' + index + '">' +
+    '<div class="row">' +
+    '<input type="checkbox" id="inc' + index + '" data-f="include" aria-label="Include ' + esc(item.sku) + ' in export"' + (item.include ? " checked" : "") + (item.listed ? " disabled" : "") + '>' +
+    thumb +
+    '<div class="titlecell"><input type="text" id="title' + index + '" data-f="title" aria-label="Title" value="' + esc(item.title) + '" placeholder="Listing title">' +
+    '<div class="meta"><span class="mono">' + esc(item.sku) + '</span><span>' + esc(item.categoryName || "Category " + (item.categoryId || "not set")) + '</span>' +
+    '<span class="count' + (titleLength > 80 ? " over" : "") + '" data-role="count">' + titleLength + '/80</span></div></div>' +
+    '<label class="price" for="price' + index + '">$<input class="mono" type="number" min="0" step="0.01" id="price' + index + '" data-f="price" aria-label="Price" value="' + esc(item.price) + '"></label>' +
+    '<span class="chip ' + statusClass + '" data-role="chip">' + esc(status.text) + '</span>' +
+    '<button class="btn small toggle" type="button" data-act="toggle" aria-expanded="' + isOpen + '">' + (isOpen ? "Close" : "Edit") + '</button>' +
+    '</div>';
+  if (isOpen) html += detailHtml(item, index, problems);
+  return html + '</article>';
+}
+
+function detailHtml(item, index, problems) {
+  var specRows = Object.keys(item.specifics).map(function (name, specIndex) {
+    return '<div class="spec" data-spec="' + specIndex + '">' +
+      '<input type="text" id="sn' + index + '_' + specIndex + '" data-spec-part="name" aria-label="Item specific name" value="' + esc(name) + '">' +
+      '<input type="text" id="sv' + index + '_' + specIndex + '" data-spec-part="value" aria-label="Item specific value" value="' + esc(item.specifics[name]) + '">' +
+      '<button class="btn small" type="button" data-act="specRemove" data-spec-index="' + specIndex + '">Remove</button></div>';
+  }).join("");
+  var photos = item.photos.map(function (name, photoIndex) {
+    return '<div class="photo"><img alt="' + esc(name) + '" src="' + esc(photoSrc(item, name)) + '" data-fallback="photo">' +
+      '<span class="name">' + esc(name) + '</span>' +
+      '<button class="btn small" type="button" data-act="photoRemove" data-photo-index="' + photoIndex + '">Remove</button></div>';
+  }).join("");
+  var conditionOptions = Object.keys(CONDITIONS).map(function (name) {
+    return '<option' + (name === item.condition ? " selected" : "") + '>' + esc(name) + '</option>';
+  }).join("");
+  var deleting = state.confirmDelete === index;
+  return '<div class="detail"><div class="col">' +
+    '<div data-role="problemBox"' + (problems.length ? "" : " hidden") + '><h3>To fix before export</h3><ul class="problems">' + problems.map(function (p) { return "<li>" + esc(p) + "</li>"; }).join("") + '</ul></div>' +
+    '<div class="grid">' +
+    '<label class="field" for="sku' + index + '"><span>SKU (custom label)</span><input class="mono" type="text" id="sku' + index + '" data-f="sku" value="' + esc(item.sku) + '"></label>' +
+    '<label class="field" for="cat' + index + '"><span>Category ID</span><input class="mono" type="text" list="catList" id="cat' + index + '" data-f="categoryId" value="' + esc(item.categoryId) + '"></label>' +
+    '<label class="field" for="catName' + index + '"><span>Category name (for your reference)</span><input type="text" id="catName' + index + '" data-f="categoryName" value="' + esc(item.categoryName) + '"></label>' +
+    '<label class="field" for="cond' + index + '"><span>Condition</span><select id="cond' + index + '" data-f="condition">' + conditionOptions + '</select></label>' +
+    '<label class="field" for="qty' + index + '"><span>Quantity</span><input class="mono" type="number" min="1" step="1" id="qty' + index + '" data-f="quantity" value="' + esc(item.quantity) + '"></label>' +
+    '<label class="field" for="bo' + index + '"><span>Best Offer (live export only)</span><select id="bo' + index + '" data-f="bestOffer"><option value="1"' + (item.bestOffer ? " selected" : "") + '>On</option><option value="0"' + (item.bestOffer ? "" : " selected") + '>Off</option></select></label>' +
+    '<label class="field" for="ship' + index + '"><span>Shipping cost, $ (live export; 0 = free)</span><input class="mono" type="number" min="0" step="0.01" id="ship' + index + '" data-f="shippingCost" value="' + esc(item.shippingCost === null ? "" : item.shippingCost) + '"></label>' +
+    '<label class="field" for="listed' + index + '"><span>Listed on eBay (date; listed items are not exported)</span><input class="mono" type="text" id="listed' + index + '" data-f="listed" placeholder="Not listed (YYYY-MM-DD)" value="' + esc(item.listed) + '"></label>' +
+    '<label class="field" for="itemId' + index + '"><span>eBay item number</span><input class="mono" type="text" id="itemId' + index + '" data-f="itemId" value="' + esc(item.itemId) + '"></label>' +
+    '<div class="actions wide field">' + (item.listed
+      ? '<button class="btn small" type="button" data-act="unlist">Mark not listed</button>'
+      : '<button class="btn small" type="button" data-act="listToday">Mark listed today</button>') + '</div>' +
+    '<label class="field wide" for="desc' + index + '"><span>Description</span><textarea id="desc' + index + '" data-f="description" rows="4">' + esc(item.description) + '</textarea></label>' +
+    '<label class="field wide" for="notes' + index + '"><span>Notes to self (not exported)</span><textarea id="notes' + index + '" data-f="notes" rows="2">' + esc(item.notes) + '</textarea></label>' +
+    '</div>' +
+    '<div class="actions"><button class="btn small" type="button" data-act="duplicate">Duplicate item</button>' +
+    '<button class="btn small danger" type="button" data-act="delete">' + (deleting ? "Click again to delete" : "Delete item") + '</button></div>' +
+    '</div><div class="col">' +
+    '<div><h3>Item specifics</h3>' + specRows + '<button class="btn small" type="button" data-act="specAdd">Add specific</button></div>' +
+    '<div><h3>Photos</h3><div class="photos">' + photos + '</div>' +
+    '<div class="actions" style="margin-top:8px">' + (window.showOpenFilePicker
+      ? '<button class="btn small" type="button" data-act="photoAdd">Add photos from disk</button>'
+      : '<label class="btn small" for="pick' + index + '">Add photos from disk</label>' +
+        '<input class="sr" type="file" id="pick' + index + '" accept="image/*" multiple data-act="photoPick">') + '</div>' +
+    '<p class="hint">Photos are tracked by file name. Keep them in photos/' + esc(item.sku) + '/ at the top of the repo so they show after a reload.</p></div>' +
+    '<label class="field" for="urls' + index + '"><span>Public photo URLs, one per line (optional for drafts)</span><textarea id="urls' + index + '" data-f="photoUrls" rows="2">' + esc(item.photoUrls.join("\n")) + '</textarea></label>' +
+    '</div></div>';
+}
+
+function renderSummary() {
+  var listings = state.data.listings;
+  var chosen = listings.filter(isExported);
+  var exportType = state.data.settings.exportType;
+  byId("listedCount").textContent = listings.filter(function (item) { return item.listed; }).length;
+  byId("markListedBtn").disabled = chosen.length === 0;
+  var total = chosen.reduce(function (sum, item) { return sum + Number(item.price || 0) * Number(item.quantity || 0); }, 0);
+  var withProblems = chosen.filter(function (item) { return validateListing(item, state.data.settings, exportType).length; }).length;
+  byId("selCount").textContent = chosen.length + " of " + listings.length;
+  byId("selTotal").textContent = money(total);
+  byId("selProblems").textContent = withProblems;
+  byId("exportBtn").disabled = chosen.length === 0;
+  byId("livePanel").hidden = exportType !== "live";
+}
+
+function renderAll() {
+  var listings = state.data.listings;
+  byId("list").innerHTML = listings.length
+    ? listings.map(rowHtml).join("")
+    : '<div class="panel empty">No items yet. Open your listings.json with "Open data file", or start with "Add item".</div>';
+  byId("exportType").value = state.data.settings.exportType;
+  Array.prototype.forEach.call(document.querySelectorAll("[data-set]"), function (input) {
+    input.value = state.data.settings[input.getAttribute("data-set")];
+  });
+  renderSummary();
+  renderFileState();
+}
+
+function refreshRowStatus(article, item) {
+  var problems = validateListing(item, state.data.settings, state.data.settings.exportType);
+  var status = rowStatus(item, problems);
+  article.className = "item " + status.cls + (item.include ? "" : " off");
+  var chip = article.querySelector('[data-role="chip"]');
+  chip.className = "chip " + status.cls;
+  chip.textContent = status.text;
+  var box = article.querySelector('[data-f="include"]');
+  box.checked = item.include;
+  box.disabled = !!item.listed;
+  var count = article.querySelector('[data-role="count"]');
+  var length = String(item.title).trim().length;
+  count.textContent = length + "/80";
+  count.className = "count" + (length > 80 ? " over" : "");
+  var list = article.querySelector(".problems");
+  if (list) {
+    list.innerHTML = problems.map(function (p) { return "<li>" + esc(p) + "</li>"; }).join("");
+    article.querySelector('[data-role="problemBox"]').hidden = problems.length === 0;
+  }
+}
+
+function loadData(raw, fileName, handle) {
+  state.data = normalizeData(raw);
+  state.fileName = fileName || "";
+  state.fileHandle = handle || null;
+  state.dirty = false;
+  state.open = {};
+  state.confirmDelete = -1;
+  renderAll();
+  try { localStorage.removeItem(STORE_KEY); } catch (err) { /* optional */ }
+}
+
+function readJsonFile(file, handle, message) {
+  var reader = new FileReader();
+  reader.onload = function () {
+    try {
+      loadData(JSON.parse(String(reader.result)), file.name, handle);
+      state.fileTime = file.lastModified;
+      if (message) showNotice(message); else byId("notice").hidden = true;
+    } catch (err) {
+      showNotice("Could not read " + file.name + ": it is not valid JSON (" + err.message + "). Fix the file and open it again.");
+    }
+  };
+  reader.readAsText(file);
+}
+
+function openDataFile() {
+  if (window.showOpenFilePicker) {
+    // "id" makes Chrome/Edge reopen the folder last used for this picker; a page can't name a folder path itself.
+    var openOptions = { id: "ebay-data", types: [{ description: "Listing data", accept: { "application/json": [".json"] } }] };
+    if (state.fileHandle) openOptions.startIn = state.fileHandle;
+    window.showOpenFilePicker(openOptions)
+      .then(function (handles) { return handles[0].getFile().then(function (file) { readJsonFile(file, handles[0]); }); })
+      .catch(function () { /* picker closed */ });
+  } else {
+    byId("fileInput").click();
+  }
+}
+
+function downloadText(text, fileName, type) {
+  var url = URL.createObjectURL(new Blob([text], { type: type }));
+  var link = document.createElement("a");
+  link.href = url; link.download = fileName;
+  document.body.appendChild(link); link.click(); link.remove();
+  setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+}
+
+var CONFLICT_TEXT = " was changed outside this page since you opened it. Reload from file to pick up those changes (edits made here since then are discarded), or Save anyway to replace the file with what this page shows.";
+
+function saveDataFile(force) {
+  var text = JSON.stringify(state.data, null, 2) + "\n";
+  function done(name) {
+    state.fileName = name; state.dirty = false; renderFileState();
+    try { localStorage.removeItem(STORE_KEY); } catch (err) { /* optional */ }
+  }
+  function writeTo(handle) {
+    return handle.createWritable().then(function (writer) {
+      return writer.write(text).then(function () { return writer.close(); });
+    }).then(function () { return handle.getFile(); })
+      .then(function (file) { state.fileHandle = handle; state.fileTime = file.lastModified; done(handle.name); byId("notice").hidden = true; });
+  }
+  if (state.fileHandle) {
+    state.fileHandle.getFile().then(function (file) {
+      if (!force && file.lastModified > state.fileTime) { showNotice(state.fileName + CONFLICT_TEXT, "conflict"); return null; }
+      return writeTo(state.fileHandle);
+    }).catch(function (err) { showNotice("Could not save to " + state.fileName + " (" + err.message + "). Try Save again and pick the file."); state.fileHandle = null; });
+  } else if (window.showSaveFilePicker) {
+    window.showSaveFilePicker({ id: "ebay-data", suggestedName: state.fileName || "listings.json", types: [{ description: "Listing data", accept: { "application/json": [".json"] } }] })
+      .then(writeTo).catch(function () { /* picker closed */ });
+  } else {
+    downloadText(text, state.fileName || "listings.json", "application/json");
+    done(state.fileName || "listings.json");
+    showNotice("Your browser downloaded the data file. Move it over the old listings.json to keep one copy.");
+  }
+}
+
+function exportCsv() {
+  var exportType = state.data.settings.exportType;
+  var chosen = state.data.listings.filter(isExported);
+  var withProblems = chosen.filter(function (item) { return validateListing(item, state.data.settings, exportType).length; }).length;
+  var fileName = exportType === "live" ? "ebay-listings.csv" : "ebay-drafts.csv";
+  downloadText(buildCsv(state.data, exportType), fileName, "text/csv");
+  showNotice("Exported " + chosen.length + " item" + (chosen.length === 1 ? "" : "s") + " to " + fileName + "." +
+    (withProblems ? " " + withProblems + " of them still have fixes listed, so eBay may reject those rows." : ""));
+}
+
+function itemFromEvent(event) {
+  var article = event.target.closest(".item");
+  if (!article) return null;
+  var index = Number(article.getAttribute("data-i"));
+  return { article: article, index: index, item: state.data.listings[index] };
+}
+
+function rebuildSpecifics(article, item) {
+  var next = {};
+  Array.prototype.forEach.call(article.querySelectorAll(".spec"), function (row) {
+    var name = row.querySelector('[data-spec-part="name"]').value;
+    var value = row.querySelector('[data-spec-part="value"]').value;
+    var key = name;
+    while (Object.prototype.hasOwnProperty.call(next, key)) key += " ";
+    next[key] = value;
+  });
+  item.specifics = next;
+}
+
+byId("list").addEventListener("input", function (event) {
+  var ctx = itemFromEvent(event);
+  if (!ctx) return;
+  var target = event.target;
+  var field = target.getAttribute("data-f");
+  if (target.getAttribute("data-spec-part")) {
+    rebuildSpecifics(ctx.article, ctx.item);
+  } else if (field === "include") {
+    ctx.item.include = target.checked;
+  } else if (field === "price" || field === "quantity") {
+    ctx.item[field] = Number(target.value) || 0;
+  } else if (field === "shippingCost") {
+    ctx.item.shippingCost = target.value.trim() === "" ? null : Number(target.value) || 0;
+  } else if (field === "listed") {
+    ctx.item.listed = target.value.trim();
+    if (ctx.item.listed) ctx.item.include = false;
+  } else if (field === "itemId") {
+    ctx.item.itemId = target.value.trim();
+  } else if (field === "bestOffer") {
+    ctx.item.bestOffer = target.value === "1";
+  } else if (field === "photoUrls") {
+    ctx.item.photoUrls = target.value.split(/\r?\n/).map(function (line) { return line.trim(); }).filter(Boolean);
+  } else if (field) {
+    ctx.item[field] = target.value;
+  } else {
+    return;
+  }
+  refreshRowStatus(ctx.article, ctx.item);
+  renderSummary();
+  markDirty();
+});
+
+byId("list").addEventListener("change", function (event) {
+  var target = event.target;
+  if (target.getAttribute("data-act") !== "photoPick") return;
+  addPhotoFiles(itemFromEvent(event).item, Array.prototype.slice.call(target.files));
+});
+
+function addPhotoFiles(item, files) {
+  if (!files.length) return;
+  files.forEach(function (file) {
+    state.blobUrls[file.name] = URL.createObjectURL(file);
+    if (item.photos.indexOf(file.name) === -1) item.photos.push(file.name);
+  });
+  markDirty();
+  renderAll();
+}
+
+function pickPhotos(item) {
+  // Its own "id", so this picker reopens the last photo folder rather than the data folder.
+  window.showOpenFilePicker({ id: "ebay-photos", multiple: true, types: [{ description: "Photos", accept: { "image/*": [".jpg", ".jpeg", ".png", ".webp", ".gif"] } }] })
+    .then(function (handles) { return Promise.all(handles.map(function (handle) { return handle.getFile(); })); })
+    .then(function (files) { addPhotoFiles(item, files); })
+    .catch(function () { /* picker closed */ });
+}
+
+byId("list").addEventListener("click", function (event) {
+  var button = event.target.closest("[data-act]");
+  if (!button || button.tagName !== "BUTTON") return;
+  var ctx = itemFromEvent(event);
+  var action = button.getAttribute("data-act");
+  var listings = state.data.listings;
+  if (action !== "delete") state.confirmDelete = -1;
+  if (action === "photoAdd") {
+    pickPhotos(ctx.item);
+    return;
+  }
+  if (action === "toggle") {
+    state.open[ctx.index] = !state.open[ctx.index];
+  } else if (action === "specAdd") {
+    var name = "New specific";
+    while (Object.prototype.hasOwnProperty.call(ctx.item.specifics, name)) name += " ";
+    ctx.item.specifics[name] = "";
+    markDirty();
+  } else if (action === "specRemove") {
+    var keys = Object.keys(ctx.item.specifics);
+    delete ctx.item.specifics[keys[Number(button.getAttribute("data-spec-index"))]];
+    markDirty();
+  } else if (action === "listToday") {
+    ctx.item.listed = today();
+    ctx.item.include = false;
+    markDirty();
+  } else if (action === "unlist") {
+    ctx.item.listed = "";
+    ctx.item.itemId = "";
+    markDirty();
+  } else if (action === "photoRemove") {
+    ctx.item.photos.splice(Number(button.getAttribute("data-photo-index")), 1);
+    markDirty();
+  } else if (action === "duplicate") {
+    var copy = JSON.parse(JSON.stringify(ctx.item));
+    copy.sku = ctx.item.sku + "-copy";
+    listings.splice(ctx.index + 1, 0, copy);
+    state.open = {}; state.open[ctx.index + 1] = true;
+    markDirty();
+  } else if (action === "delete") {
+    if (state.confirmDelete === ctx.index) {
+      listings.splice(ctx.index, 1);
+      state.open = {}; state.confirmDelete = -1;
+      markDirty();
+    } else {
+      state.confirmDelete = ctx.index;
+    }
+  }
+  renderAll();
+});
+
+document.addEventListener("error", function (event) {
+  var target = event.target;
+  if (target.tagName !== "IMG" || !target.getAttribute("data-fallback")) return;
+  var holder = document.createElement("span");
+  if (target.getAttribute("data-fallback") === "thumb") { holder.className = "thumb none"; holder.textContent = "not found"; }
+  else { holder.className = "ph"; holder.textContent = "Not in this SKU's photos folder"; }
+  target.replaceWith(holder);
+}, true);
+
+byId("openBtn").addEventListener("click", openDataFile);
+byId("fileInput").addEventListener("change", function (event) {
+  if (event.target.files[0]) readJsonFile(event.target.files[0], null);
+  event.target.value = "";
+});
+byId("saveBtn").addEventListener("click", function () { saveDataFile(false); });
+byId("noticeForce").addEventListener("click", function () { saveDataFile(true); });
+byId("noticeReload").addEventListener("click", function () {
+  var handle = state.fileHandle;
+  if (!handle) { openDataFile(); return; }
+  handle.getFile().then(function (file) { readJsonFile(file, handle); });
+});
+function checkForOutsideChanges() {
+  var handle = state.fileHandle;
+  if (!handle || document.visibilityState === "hidden") return;
+  handle.getFile().then(function (file) {
+    if (file.lastModified <= state.fileTime) return;
+    if (state.dirty) showNotice(state.fileName + CONFLICT_TEXT, "conflict");
+    else readJsonFile(file, handle, state.fileName + " was changed outside this page, so the page loaded the new version.");
+  }).catch(function () { /* file may have moved; Save will report it */ });
+}
+window.addEventListener("focus", checkForOutsideChanges);
+document.addEventListener("visibilitychange", checkForOutsideChanges);
+byId("exportBtn").addEventListener("click", exportCsv);
+byId("noticeClose").addEventListener("click", function () { byId("notice").hidden = true; });
+byId("addBtn").addEventListener("click", function () {
+  var listings = state.data.listings;
+  listings.push(blankListing(listings.length));
+  state.open[listings.length - 1] = true;
+  markDirty();
+  renderAll();
+  var added = byId("title" + (listings.length - 1));
+  if (added) added.focus();
+});
+function setAll(value) {
+  state.data.listings.forEach(function (item) { item.include = value && !item.listed; });
+  markDirty();
+  renderAll();
+}
+byId("allBtn").addEventListener("click", function () { setAll(true); });
+byId("noneBtn").addEventListener("click", function () { setAll(false); });
+byId("markListedBtn").addEventListener("click", function () {
+  var date = today();
+  var count = 0;
+  state.data.listings.forEach(function (item) {
+    if (!isExported(item)) return;
+    item.listed = date; item.include = false; count += 1;
+  });
+  markDirty();
+  renderAll();
+  showNotice("Marked " + count + " item" + (count === 1 ? "" : "s") + " as listed on " + date + ". They won't be exported again. Save the data file to keep this.");
+});
+byId("hideListed").addEventListener("change", function (event) {
+  byId("list").classList.toggle("hide-listed", event.target.checked);
+  try { localStorage.setItem("ebayListingEditor.hideListed", event.target.checked ? "1" : ""); } catch (err) { /* optional */ }
+});
+try {
+  if (localStorage.getItem("ebayListingEditor.hideListed")) { byId("hideListed").checked = true; byId("list").classList.add("hide-listed"); }
+} catch (err) { /* optional */ }
+byId("exportType").addEventListener("change", function (event) {
+  state.data.settings.exportType = event.target.value;
+  markDirty();
+  renderAll();
+});
+byId("livePanel").addEventListener("input", function (event) {
+  var key = event.target.getAttribute("data-set");
+  if (!key) return;
+  state.data.settings[key] = key === "dispatchDays" ? Number(event.target.value) || 0 : event.target.value;
+  markDirty();
+  Array.prototype.forEach.call(document.querySelectorAll(".item"), function (article) {
+    refreshRowStatus(article, state.data.listings[Number(article.getAttribute("data-i"))]);
+  });
+  renderSummary();
+});
+window.addEventListener("dragover", function (event) { event.preventDefault(); });
+window.addEventListener("drop", function (event) {
+  event.preventDefault();
+  var file = event.dataTransfer && event.dataTransfer.files[0];
+  if (file && /\.json$/i.test(file.name)) readJsonFile(file, null);
+});
+window.addEventListener("beforeunload", function (event) {
+  if (state.dirty) { event.preventDefault(); event.returnValue = ""; }
+});
+
+(function start() {
+  var restored = null;
+  try { restored = JSON.parse(localStorage.getItem(STORE_KEY) || "null"); } catch (err) { restored = null; }
+  if (restored && restored.dirty && restored.data && restored.data.listings && restored.data.listings.length) {
+    state.data = normalizeData(restored.data);
+    state.fileName = restored.fileName || "";
+    state.dirty = true;
+    showNotice("Showing unsaved edits from your last session in this browser. To start from the file instead, use Open data file. Saving these edits replaces whatever is in the file now.");
+  }
+  renderAll();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "name": "ebay-listings",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Listing data, a local editor and Seller Hub bulk-upload CSV export for eBay sales",
+  "scripts": {
+    "validate": "node scripts/validate.js draft",
+    "validate:live": "node scripts/validate.js live",
+    "export": "node scripts/export-csv.js draft",
+    "export:live": "node scripts/export-csv.js live"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

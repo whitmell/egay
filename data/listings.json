@@ -1,0 +1,44 @@
+{
+  "settings": {
+    "exportType": "draft",
+    "liveAction": "VerifyAdd",
+    "scheduleTime": "",
+    "location": "",
+    "dispatchDays": 1,
+    "shippingService": "USPSParcel",
+    "returnsAccepted": "ReturnsAccepted",
+    "returnsWithin": "Days_30",
+    "returnShippingPaidBy": "Buyer",
+    "photoBucket": "",
+    "photoRegion": ""
+  },
+  "listings": [
+    {
+      "include": true,
+      "sku": "HW-01",
+      "title": "Example 16GB (2x8GB) DDR4-2666 PC4-21300 SODIMM Laptop RAM",
+      "categoryId": "170083",
+      "categoryName": "Memory (RAM)",
+      "condition": "Used",
+      "price": 25,
+      "quantity": 1,
+      "bestOffer": true,
+      "shippingCost": 5,
+      "listed": "",
+      "itemId": "",
+      "description": "Example listing. Replace this text with what you are selling: brand, model, part number, capacity, and its condition. Used.",
+      "specifics": {
+        "Brand": "Example",
+        "MPN": "EXAMPLE-123",
+        "Total Capacity": "16 GB",
+        "Number of Modules": "2",
+        "Capacity per Module": "8 GB",
+        "Type": "DDR4 SDRAM",
+        "Form Factor": "SO-DIMM"
+      },
+      "photos": [],
+      "photoUrls": [],
+      "notes": "Notes to yourself go here; they are never exported. Delete this example when you add your own items."
+    }
+  ]
+}

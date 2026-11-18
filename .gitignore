@@ -1,0 +1,8 @@
+# Item photos stay local: they are large and some show serial numbers
+photos/*
+!photos/.gitkeep
+
+# Generated Seller Hub uploads
+exports/
+
+node_modules/
